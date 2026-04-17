@@ -1,0 +1,63 @@
+alias: "Zombie Node Radar (Intent-Based Monitor)"
+description: >
+  Detects network failures and "Zombie" batteries by intercepting Event Bus orders
+  and empirically verifying execution after an 8-second latency window.
+mode: parallel
+max: 10
+
+trigger:
+  - platform: event
+    event_type: call_service
+    event_data:
+      domain: switch
+
+condition:
+  # Ensure strict data contract. 
+  # REMOVE the 'remote_' line if you want to monitor ALL switches.
+  - condition: template
+    value_template: >
+      {{ trigger.event.data.service_data is defined and 
+         trigger.event.data.service_data.entity_id is defined and 
+         'remote_' in (trigger.event.data.service_data.entity_id | string) }}
+
+action:
+  # ---------------------------------------------------------
+  # ENGINE: Robust Extraction & Data Sanitization
+  # ---------------------------------------------------------
+  - variables:
+      # Extract safely regardless of String or Array formatting
+      target_entity: >-
+        {% set raw = trigger.event.data.service_data.entity_id %}
+        {{ (raw if raw is string else raw[0]) | trim }}
+      
+      requested_service: "{{ trigger.event.data.service | trim }}"
+      
+      # Calculate empirical target state strictly without invisible \n
+      target_state: >-
+        {%- if requested_service == 'turn_on' -%}on
+        {%- elif requested_service == 'turn_off' -%}off
+        {%- elif requested_service == 'toggle' -%}{{ 'off' if states(target_entity) == 'on' else 'on' }}
+        {%- else -%}unknown{%- endif -%}
+
+  # ---------------------------------------------------------
+  # LATENCY WINDOW
+  # ---------------------------------------------------------
+  - delay: "00:00:08"
+
+  # ---------------------------------------------------------
+  # EMPIRICAL VERIFICATION (Differential Testing)
+  # ---------------------------------------------------------
+  - if:
+      - condition: template
+        value_template: "{{ states(target_entity) | trim != target_state | trim and target_state | trim != 'unknown' }}"
+    then:
+      - service: system_log.write
+        data:
+          level: error
+          logger: custom.zombie_radar
+          message: "EXECUTION FAILURE: {{ target_entity }} ignored ({{ requested_service }}). Stuck at {{ states(target_entity) }}."
+          
+      # Trigger your notification system
+      - service: notify.notify
+        data:
+          message: "🚨 EMPIRICAL ALERT: {{ target_entity }} failed to execute. (Suspect: Zombie Battery 🪫 or Offline Device)."
