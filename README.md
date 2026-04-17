@@ -19,3 +19,13 @@ This automation acts as a "Radar" by performing Empirical Verification:
 3. It waits exactly **8 seconds** (to account for Zigbee mesh routing latency).
 4. It checks if the actual physical state matches the Intended State. 
 5. If the state didn't change, the device failed the physical test (Zombie Phase). It instantly notifies you to swap the battery *before* the device loses its pairing key.
+
+## 🎯 Scope & Customization (Extending the Radar)
+
+By default, this code is surgically designed for the `switch` domain and filters for entities containing `remote_` in their name.
+
+**To monitor ALL switches in your house:**
+Remove `and 'remote_' in (trigger.event.data.service_data.entity_id | string)` from the `condition` block.
+
+**To monitor smart bulbs (Lights):**
+Do not modify this file to do everything (Anti-Pattern). Duplicate the YAML file, change `domain: switch` to `domain: light`, and you now have a dedicated Light Radar.
